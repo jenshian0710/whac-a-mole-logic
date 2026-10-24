@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邏輯打地鼠 - 奇偶博弈</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* 晚上的夜色背景 */
+            color: #f8fafc;
+        }
+        /* 隱藏捲軸但保留滾動功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* 彈出動畫 */
+        @keyframes popUp {
+            0% { transform: translate(-50%, 20px) scale(0.5); opacity: 0; }
+            70% { transform: translate(-50%, -10px) scale(1.1); opacity: 1; }
+            100% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, 10px) scale(0.8); }
+        }
+        .animate-fade-out {
+            animation: fadeOut 0.3s ease-in forwards;
+        }
+        /* 槌子敲擊動畫 */
+        @keyframes hammerStrike {
+            0% { transform: rotate(45deg) translateY(-30px); opacity: 0; }
+            20% { opacity: 1; transform: rotate(45deg) translateY(-30px); }
+            50% { transform: rotate(-30deg) translateY(0); }
+            80% { transform: rotate(-30deg) translateY(0); opacity: 1; }
+            100% { transform: rotate(45deg) translateY(-30px); opacity: 0; }
+        }
+        .hammer-anim {
+            animation: hammerStrike 0.5s ease-in-out forwards;
+            transform-origin: bottom right;
+        }
+        /* 眼冒金星動畫 */
+        @keyframes spinStars {
+            0% { transform: translate(-50%, -50%) rotate(0deg) scale(0.5); opacity: 1; }
+            100% { transform: translate(-50%, -100%) rotate(360deg) scale(1.5); opacity: 0; }
+        }
+        .stars-anim {
+            animation: spinStars 1.2s linear forwards;
+        }
+        /* 地鼠浮起動畫 */
+        @keyframes moleFloat {
+            0% { transform: translateY(20px) scale(0.5); opacity: 0; }
+            20% { transform: translateY(0px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1); opacity: 0; }
+        }
+        .mole-float-anim {
+            animation: moleFloat 1.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+    <!-- 頂部標題區 -->
+    <header class="text-center py-6 bg-slate-900 border-b border-slate-800 shadow-md z-20 relative">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 mb-2">
+            🦊 邏輯打地鼠
+        </h1>
+        <p class="text-slate-400 text-sm md:text-base">挑戰數學奇偶博弈，你能用最少步數抓到牠嗎？</p>
+    </header>
+
+    <main class="flex-grow flex flex-col items-center justify-center p-4 relative z-10">
+        
+        <!-- 狀態一：遊戲設定與規則說明 -->
+        <div id="intro-screen" class="max-w-2xl w-full bg-slate-800 rounded-2xl shadow-2xl p-6 md:p-8 border border-slate-700">
+            <h2 class="text-xl font-bold text-white mb-4 border-b border-slate-600 pb-2">📜 遊戲規則</h2>
+            <ul class="list-disc list-inside text-slate-300 space-y-2 mb-8 leading-relaxed">
+                <li>地下有 <strong class="text-green-400">N</strong> 個排成一線的地洞，一隻狡猾的地鼠正躲在其中一個裡。</li>
+                <li><strong>每天早上</strong>，你有一次機會可以檢查「其中一個」地洞。</li>
+                <li><strong>每天晚上</strong>，地鼠「一定」會移動到相鄰（左邊或右邊）的地洞。</li>
+                <li>乍看之下是運氣遊戲，但只要運用邏輯，保證能在特定天數內抓出牠！</li>
+            </ul>
+
+            <div class="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center gap-4">
+                <label for="hole-count" class="text-lg font-semibold text-slate-200">
+                    請設定地洞數量 (N)：
+                </label>
+                <div class="flex items-center gap-4">
+                    <button onclick="adjustHoles(-1)" class="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-xl font-bold transition-colors">-</button>
+                    <input type="number" id="hole-count" value="5" min="3" max="15" readonly
+                           class="w-20 bg-slate-800 text-center text-2xl font-bold text-white border-none focus:ring-0">
+                    <button onclick="adjustHoles(1)" class="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-xl font-bold transition-colors">+</button>
+                </div>
+                <p class="text-xs text-slate-500">建議數量：3 ~ 10 個</p>
+                
+                <button onclick="startGame()" class="mt-4 px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-green-500/30 transition-all transform hover:-translate-y-1">
+                    開始抓地鼠！
+                </button>
+            </div>
+        </div>
+
+        <!-- 狀態二：遊戲主畫面 -->
+        <div id="game-screen" class="w-full max-w-4xl hidden flex-col items-center">
+            
+            <div class="w-full flex justify-between items-center mb-6 px-4">
+                <div class="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 shadow-inner">
+                    <span class="text-slate-400 text-sm block">當前進度</span>
+                    <span class="text-2xl font-bold text-blue-400">第 <span id="day-counter">1</span> 天</span>
+                </div>
+                <button onclick="resetGame()" class="text-slate-400 hover:text-white underline text-sm transition-colors">
+                    放棄並重新設定
+                </button>
+            </div>
+
+            <!-- 地貌與地洞區塊 -->
+            <div class="relative w-full h-48 md:h-64 rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-b from-sky-900 to-indigo-900 border-[3px] border-slate-700">
+                <!-- 太陽/月亮裝飾 -->
+                <div id="sky-icon" class="absolute top-4 left-6 text-3xl opacity-80">🌙</div>
+                
+                <!-- 草地 -->
+                <div class="absolute bottom-16 w-full h-12 bg-gradient-to-b from-green-600 to-green-700 border-t-4 border-green-500 z-0"></div>
+                <!-- 泥土 -->
+                <div class="absolute bottom-0 w-full h-16 bg-[#5c4033] border-t-2 border-[#4a332a] z-0 flex pattern-dots"></div>
+                
+                <!-- 洞口容器 -->
+                <div id="holes-container" class="absolute bottom-12 w-full px-4 md:px-8 flex justify-between items-end z-10 no-scrollbar overflow-x-auto gap-2 py-4">
+                    <!-- 動態生成地洞 -->
+                </div>
+            </div>
+
+            <!-- 歷史紀錄 -->
+            <div class="w-full mt-6 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-md">
+                <h3 class="text-slate-300 font-semibold mb-2 text-sm">🕵️ 行動日誌 (向右滾動查看):</h3>
+                <div id="game-log" class="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    <span class="text-slate-500 text-sm italic">遊戲開始，請點擊上方洞口進行第一天的檢查...</span>
+                </div>
+            </div>
+            
+        </div>
+
+    </main>
+
+    <!-- 狀態三：通關與邏輯解說 Modal -->
+    <div id="win-modal" class="fixed inset-0 bg-slate-900/90 hidden flex-col items-center justify-center z-50 p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-slate-800 max-w-3xl w-full rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-slate-600 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div class="bg-gradient-to-r from-emerald-600 to-green-600 p-6 text-center">
+                <div class="text-6xl mb-2">🎉 🦊 🐾</div>
+                <h2 class="text-3xl font-extrabold text-white">成功抓到地鼠了！</h2>
+                <p class="text-green-100 mt-2 text-lg">你總共花了 <strong id="final-days" class="text-2xl text-yellow-300 mx-1">X</strong> 天完成挑戰</p>
+            </div>
+            
+            <div class="p-6 md:p-8 overflow-y-auto no-scrollbar">
+                <h3 class="text-xl font-bold text-blue-400 mb-4 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    邏輯揭秘：為什麼絕對抓得到？
+                </h3>
+                
+                <div class="space-y-4 text-slate-300 leading-relaxed text-sm md:text-base">
+                    <p>
+                        剛剛你設定了 <strong id="modal-n" class="text-white text-lg">N</strong> 個洞。你知道嗎？不管地鼠怎麼逃，對於 <strong class="text-white">N</strong> 個洞，最多只需要 <strong id="modal-formula" class="text-green-400 text-xl font-bold mx-1">2(N-2)</strong> 步就絕對能抓到牠！
+                    </p>
+                    
+                    <div class="bg-slate-900 rounded-lg p-4 border-l-4 border-blue-500">
+                        <h4 class="font-bold text-white mb-2">1. 奇偶性交替律</h4>
+                        <p>因為地鼠每天晚上只能移動到「相鄰」的洞口，這代表牠所在洞口的編號，每天必定會在「奇數」與「偶數」之間來回切換。</p>
+                    </div>
+
+                    <div class="bg-slate-900 rounded-lg p-4 border-l-4 border-purple-500">
+                        <h4 class="font-bold text-white mb-2">2. 第一波掃描：正向推進 (2 ➔ N-1)</h4>
+                        <p>我們從第 1 天開始，依次檢查 2, 3, 4 ... 直到 N-1 號洞。因為我們檢查的洞口編號每天 +1（奇偶交替），跟地鼠移動的奇偶變化完全同步，這會把「開局在偶數洞」的地鼠逼入死角。這一波需要 <strong class="text-white">N-2</strong> 天。</p>
+                    </div>
+
+                    <div class="bg-slate-900 rounded-lg p-4 border-l-4 border-pink-500">
+                        <h4 class="font-bold text-white mb-2">3. 第二波掃描：反向折返 (N-1 ➔ 2)</h4>
+                        <p>如果第一波沒抓到，代表地鼠第一天一定在「奇數洞」。此時只要<strong class="text-yellow-300">「重複檢查一次 N-1 號洞」</strong>（因為我們停留在原地，而地鼠移動了，雙方的奇偶差就會被矯正過來！），接著再反向從 N-1 退回檢查到 2 號洞，就必定能將牠攔截，這波同樣需要 <strong class="text-white">N-2</strong> 天。</p>
+                    </div>
+                    
+                    <div class="bg-slate-800 p-4 rounded-lg text-center mt-6 border border-slate-600 shadow-inner">
+                        <p class="text-lg text-slate-200">
+                            總結公式： <strong>(N - 2) + (N - 2) = <span class="text-yellow-400 text-2xl font-black">2(N - 2)</span> 步</strong>
+                        </p>
+                        <p class="mt-2 text-sm text-slate-400">
+                            以你選擇的 <span id="calc-n" class="font-bold text-white"></span> 個洞為例，最多只要 <span id="calc-max" class="font-bold text-green-400"></span> 天就能完美通關！
+                        </p>
+                    </div>
+
+                    <!-- 新增：動態展示必勝敲擊順序 -->
+                    <div class="bg-slate-900 rounded-lg p-5 border-l-4 border-yellow-500 mt-4 shadow-md">
+                        <h4 class="font-bold text-white mb-2 text-lg">💡 萬用必勝敲擊順序（折返法）</h4>
+                        <p class="text-sm text-slate-300 mb-3">無論洞數 N 是奇數還是偶數，為了確保奇偶性完美對齊，最通用的必勝策略是「先正向掃描、再反向掃描回來」：</p>
+                        <div id="win-sequence" class="flex flex-wrap gap-2 text-xl font-black text-yellow-300 bg-slate-800 p-4 rounded-xl border border-slate-700 items-center justify-center">
+                            <!-- 這裡由 JS 動態生成順序 -->
+                        </div>
+                        <p id="win-sequence-note" class="text-xs text-slate-400 mt-3 text-center"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-slate-700 text-center bg-slate-800">
+                <button onclick="resetGame()" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold text-lg shadow-lg transition-colors w-full md:w-auto">
+                    再挑戰一次
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增頁尾署名 -->
+    <footer class="w-full text-center py-4 mt-auto z-20 relative text-slate-500 text-sm">
+        網頁設計：李政憲老師
+    </footer>
+
+    <script>
+        // Game State Variables
+        let N = 5;
+        let molePos = -1;
+        let currentDay = 1;
+        let gameOver = false;
+        let isAnimating = false;
+
+        // UI Elements
+        const screens = {
+            intro: document.getElementById('intro-screen'),
+            game: document.getElementById('game-screen'),
+            winModal: document.getElementById('win-modal')
+        };
+        const inputN = document.getElementById('hole-count');
+        const holesContainer = document.getElementById('holes-container');
+        const dayCounterEl = document.getElementById('day-counter');
+        const gameLogEl = document.getElementById('game-log');
+        const skyIcon = document.getElementById('sky-icon');
+
+        // 音效系統 (使用內建 Web Audio API，無須外部資源)
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'hit') {
+                // 成功抓到的音效 (高音歡呼感)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(500, now);
+                osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+                osc.frequency.exponentialRampToValueAtTime(1500, now + 0.2);
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.5, now + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'miss') {
+                // 撲空的音效 (低沉失敗感)
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'swing') {
+                // 揮動槌子的音效 (短促)
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+        }
+
+        // Number Input Logic
+        function adjustHoles(change) {
+            let val = parseInt(inputN.value) + change;
+            if (val < 3) val = 3;
+            if (val > 15) val = 15;
+            inputN.value = val;
+        }
+
+        // Initialize Game
+        function startGame() {
+            initAudio(); // 在使用者互動(點擊開始)時初始化音效以符合瀏覽器規範
+            N = parseInt(inputN.value);
+            // Randomly place mole between 1 and N
+            molePos = Math.floor(Math.random() * N) + 1;
+            currentDay = 1;
+            gameOver = false;
+            isAnimating = false;
+
+            // Update UI
+            screens.intro.classList.add('hidden');
+            screens.game.classList.remove('hidden');
+            screens.game.classList.add('flex');
+            dayCounterEl.innerText = currentDay;
+            gameLogEl.innerHTML = '';
+            skyIcon.innerText = "☀️"; // Start at morning
+
+            renderHoles();
+        }
+
+        // Render visual holes
+        function renderHoles() {
+            holesContainer.innerHTML = '';
+            // 根據數量動態調整洞的寬度與間距
+            const flexBasis = N > 8 ? 'flex-shrink-0' : 'flex-1';
+            
+            for (let i = 1; i <= N; i++) {
+                const holeWrapper = document.createElement('div');
+                holeWrapper.className = `relative flex flex-col items-center justify-end h-full ${flexBasis} min-w-[50px] max-w-[80px] group`;
+                
+                // 洞口按鈕
+                const holeBtn = document.createElement('button');
+                holeBtn.id = `hole-${i}`;
+                holeBtn.className = "w-[90%] pb-[45%] bg-black rounded-[50%] border-[3px] border-emerald-900 shadow-[inset_0_-8px_15px_rgba(0,0,0,0.8)] relative hover:border-emerald-700 transition-colors z-20 cursor-pointer overflow-visible focus:outline-none";
+                holeBtn.onclick = () => handleHoleClick(i);
+                
+                // 洞口編號指示
+                const numLabel = document.createElement('div');
+                numLabel.className = "absolute -bottom-8 text-xs md:text-sm font-bold text-slate-300 bg-slate-900/60 px-2 py-0.5 rounded";
+                numLabel.innerText = i;
+
+                // 用來裝動畫元素的容器 (在按鈕內部)
+                const animContainer = document.createElement('div');
+                animContainer.id = `anim-${i}`;
+                animContainer.className = "absolute -top-12 left-1/2 w-16 h-16 pointer-events-none z-30"; // width/height to center properly
+                animContainer.style.transform = "translateX(-50%)"; // Center alignment helper
+                
+                holeBtn.appendChild(animContainer);
+                holeWrapper.appendChild(holeBtn);
+                holeWrapper.appendChild(numLabel);
+                
+                holesContainer.appendChild(holeWrapper);
+            }
+        }
+
+        // Handle Player Click
+        async function handleHoleClick(index) {
+            if (isAnimating || gameOver) return;
+            isAnimating = true;
+
+            const animEl = document.getElementById(`anim-${index}`);
+            const isHit = (index === molePos);
+            
+            // 1. 播放揮槌音效並顯示槌子
+            playSound('swing');
+            animEl.innerHTML = '<div class="absolute inset-0 flex items-center justify-center text-[70px] hammer-anim drop-shadow-xl z-50 -ml-4">🔨</div>';
+
+            // 2. 等待槌子敲下 (動畫進行約 250ms 時擊中)
+            setTimeout(() => {
+                if (isHit) {
+                    // 抓到了邏輯
+                    playSound('hit');
+                    gameOver = true;
+                    skyIcon.innerText = "🎯";
+                    
+                    // 替換為地鼠 🐹、眼冒金星 💫 與浮起動畫
+                    animEl.innerHTML += `
+                        <div class="absolute top-4 left-1/2 mole-float-anim flex items-center justify-center z-40" style="transform: translateX(-50%)">
+                            <span class="text-6xl drop-shadow-2xl">🐹</span>
+                        </div>
+                        <div class="absolute top-0 left-1/2 stars-anim flex items-center justify-center z-50">
+                            <span class="text-5xl">💫</span>
+                        </div>
+                    `;
+                    
+                    addLogEntry(index, true);
+                    
+                    // 等待使用者看完動畫後彈出結算畫面
+                    setTimeout(showWinModal, 1500);
+                } else {
+                    // 撲空邏輯
+                    playSound('miss');
+                    // 保留槌子，並在下方加入失敗的 ❌
+                    animEl.innerHTML += '<div class="absolute top-10 left-1/2 flex items-center justify-center text-4xl animate-pop text-red-500 font-black drop-shadow-md z-30" style="transform: translateX(-50%)">❌</div>';
+                    addLogEntry(index, false);
+                    
+                    setTimeout(() => {
+                        // 平滑移除失敗標記
+                        const crossEl = animEl.children[animEl.children.length - 1];
+                        if(crossEl) crossEl.classList.replace('animate-pop', 'animate-fade-out');
+                        
+                        setTimeout(() => {
+                            animEl.innerHTML = '';
+                            nightTimeMove();
+                        }, 300); // 等待淡出
+                    }, 800); 
+                }
+            }, 250); // 對齊槌子敲到地面的時間
+        }
+
+        // Logic for Mole moving at night
+        function nightTimeMove() {
+            skyIcon.innerText = "🌙"; // Change to night
+            
+            // Move logic
+            if (molePos === 1) {
+                molePos = 2;
+            } else if (molePos === N) {
+                molePos = N - 1;
+            } else {
+                // Randomly move left or right
+                molePos += (Math.random() < 0.5 ? 1 : -1);
+            }
+
+            // Next day transition
+            setTimeout(() => {
+                currentDay++;
+                dayCounterEl.innerText = currentDay;
+                skyIcon.innerText = "☀️"; // Back to morning
+                isAnimating = false;
+            }, 600); // Night duration
+        }
+
+        // Update Log UI
+        function addLogEntry(holeIndex, isHit) {
+            if (currentDay === 1 && gameLogEl.innerText.includes('遊戲開始')) {
+                gameLogEl.innerHTML = ''; // clear initial msg
+            }
+
+            const entry = document.createElement('div');
+            entry.className = `whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium border flex-shrink-0 flex items-center gap-1 ${
+                isHit 
+                ? 'bg-green-900/50 border-green-700 text-green-300' 
+                : 'bg-slate-700/50 border-slate-600 text-slate-300'
+            }`;
+            
+            entry.innerHTML = `<span class="text-slate-400 opacity-75">D${currentDay}</span> 查${holeIndex}洞 ${isHit ? '🎯 抓到了' : '💨 撲空'}`;
+            gameLogEl.appendChild(entry);
+            
+            // Auto scroll to latest
+            gameLogEl.scrollLeft = gameLogEl.scrollWidth;
+        }
+
+        // Show Win Modal and Calculate Math
+        function showWinModal() {
+            document.getElementById('final-days').innerText = currentDay;
+            document.getElementById('modal-n').innerText = N;
+            document.getElementById('calc-n').innerText = N;
+            
+            const maxSteps = 2 * (N - 2);
+            document.getElementById('modal-formula').innerText = maxSteps;
+            document.getElementById('calc-max').innerText = maxSteps;
+            
+            // 動態計算並顯示必勝敲擊順序 (通用折返法：2 到 N-1，再從 N-1 退回 2)
+            const seqContainer = document.getElementById('win-sequence');
+            const seqNote = document.getElementById('win-sequence-note');
+            seqContainer.innerHTML = '';
+            let sequence = [];
+            
+            // 第一趟：正向掃描 2 到 N-1
+            for(let i = 2; i <= N - 1; i++) sequence.push(i);
+            // 第二趟：反向折返 N-1 到 2 (完美解決偶數洞與奇數洞的奇偶性轉換問題)
+            for(let i = N - 1; i >= 2; i--) sequence.push(i);
+            
+            sequence.forEach((num, idx) => {
+                const span = document.createElement('span');
+                span.innerText = num;
+                // 特別標示中間折返點 (重複敲擊的那兩天)
+                const isTurnAround = (idx === N - 3 || idx === N - 2) && N > 3;
+                span.className = `w-8 h-8 flex items-center justify-center rounded-full border shadow-[0_0_10px_rgba(234,179,8,0.2)] ${
+                    isTurnAround 
+                    ? 'bg-yellow-600/40 border-yellow-400 text-white' 
+                    : 'bg-slate-700 border-yellow-600/50 text-yellow-300'
+                }`;
+                seqContainer.appendChild(span);
+                
+                if(idx < sequence.length - 1) {
+                    const arrow = document.createElement('span');
+                    arrow.className = 'text-slate-500 text-sm mx-1';
+                    arrow.innerText = '➔';
+                    seqContainer.appendChild(arrow);
+                }
+            });
+
+            if (N % 2 === 0) {
+                seqNote.innerText = `※ 注意到了嗎？因為 N=${N} 是偶數，中間連續兩天檢查「${N-1}號洞」能強制轉換奇偶性，確保第二波不會與地鼠錯身而過！`;
+            } else if (N > 3) {
+                seqNote.innerText = `※ 補充：因為 N=${N} 是奇數，除了折返法之外，重複兩次正向掃描 (2~${N-1}, 2~${N-1}) 也能抓到喔！`;
+            } else {
+                seqNote.innerText = `※ 當 N=3 時，連續檢查中間的 2 號洞兩次即可必勝！`;
+            }
+            
+            screens.winModal.classList.remove('hidden');
+            screens.winModal.classList.add('flex');
+            
+            // Small opacity transition effect
+            setTimeout(() => {
+                screens.winModal.style.opacity = 1;
+            }, 50);
+        }
+
+        // Reset completely
+        function resetGame() {
+            screens.winModal.classList.add('hidden');
+            screens.winModal.classList.remove('flex');
+            screens.game.classList.add('hidden');
+            screens.game.classList.remove('flex');
+            screens.intro.classList.remove('hidden');
+            
+            // Reset modal opacity
+            screens.winModal.style.opacity = 0;
+        }
+        
+        // Setup initial opacity for transitions
+        screens.winModal.style.opacity = 0;
+        screens.winModal.style.transition = "opacity 0.3s ease";
+    </script>
+</body>
+</html>
